@@ -1,16 +1,11 @@
-use std::path::{Path};
+use std::path::{PathBuf};
 use fastanvil::{RenderedPalette, Rgba} ;
 
 use flate2::read::{GzDecoder};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub fn get_palette(path: Option<&str>) -> Result<RenderedPalette> {
-    let path = match path {
-        Some(path) => Path::new(path),
-        None => panic!("no palette"),
-    };
-
+pub fn get_palette(path: &PathBuf) -> Result<RenderedPalette> {
     let f = std::fs::File::open(path)?;
     let f = GzDecoder::new(f);
     let mut ar = tar::Archive::new(f);

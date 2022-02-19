@@ -30,6 +30,10 @@ struct Cli {
     #[clap(short, long, value_name="DIR", parse(from_os_str))]
     image_path: PathBuf,
 
+    /// Palette path
+    #[clap(short, long, value_name="DIR", parse(from_os_str))]
+    palette_path: PathBuf,
+
     /// Log mode
     #[clap(short, long)]
     bgmode: bool
@@ -45,7 +49,7 @@ fn main() {
 
     let dim = Dimension::from_dimdir(&args.dimension_path, &args.cache_path).unwrap();
 
-    let palette = Arc::new(crate::renderer::get_palette(Some(r"palette.tar.gz")).unwrap());
+    let palette = Arc::new(crate::renderer::get_palette(&args.palette_path).unwrap());
     let dim_renderer = DimensionRenderer::new(dim, &args.image_path);
 
     let (progress_sender, progress_receiver) = sync_channel(10);
