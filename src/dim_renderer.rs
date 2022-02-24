@@ -1,4 +1,4 @@
-use fastanvil::{Region, RegionLoader, RegionFileLoader, CurrentJavaChunk, TopShadeRenderer};
+use fastanvil::{Region, RegionLoader, RegionFileLoader, JavaChunk, TopShadeRenderer};
 use std::collections::{HashMap, HashSet};
 use std::mem::drop;
 use std::sync::{Arc, Mutex, RwLock, mpsc::SyncSender};
@@ -10,7 +10,7 @@ use slice_of_array::prelude::*;
 use crate::dimension::Dimension;
 use crate::update_detector::{RLoc, CLoc, r2r, c2c};
 
-type ShareRegion = Arc<Box<dyn Region<CurrentJavaChunk>>>;
+type ShareRegion = Arc<Box<dyn Region<JavaChunk>>>;
 type ChunkImageBuffer = [fastanvil::Rgba; 16*16];
 
 pub fn to_image_name(rloc: &RLoc) -> String {
@@ -28,10 +28,10 @@ pub enum RegionProgress {
 
 struct DimensionRendererInner {
     image_path: PathBuf,
-    loader: RegionFileLoader<CurrentJavaChunk>,
+    loader: RegionFileLoader<JavaChunk>,
     dimension: Box<Dimension>,
     regions: Arc<Mutex<HashMap<RLoc, ShareRegion>>>,
-    chunks: Arc<RwLock<HashMap<(RLoc, CLoc), Arc<CurrentJavaChunk>>>>,
+    chunks: Arc<RwLock<HashMap<(RLoc, CLoc), Arc<JavaChunk>>>>,
 }
 
 pub struct DimensionRenderer {
@@ -49,7 +49,7 @@ impl DimensionRenderer {
         })
     }
 
-    fn get_chunk(inner: &DimensionRendererInner, rloc: &RLoc, cloc: &CLoc) -> Option<Arc<CurrentJavaChunk>> {
+    fn get_chunk(inner: &DimensionRendererInner, rloc: &RLoc, cloc: &CLoc) -> Option<Arc<JavaChunk>> {
         let key = (rloc.clone(), cloc.clone());
         let chunks_r = Arc::clone(&inner.chunks);
         let chunks_rl = chunks_r.read().unwrap();
@@ -77,7 +77,7 @@ impl DimensionRenderer {
         DimensionRenderer {
             inner: Arc::new(DimensionRendererInner {
                 image_path: PathBuf::from(image_path),
-                loader: RegionFileLoader::<CurrentJavaChunk>::new(dimension.dim_path.clone()),
+                loader: RegionFileLoader::<JavaChunk>::new(dimension.dim_path.clone()),
                 dimension: Box::new(dimension),
                 regions: Default::default(),
                 chunks: Default::default(),
