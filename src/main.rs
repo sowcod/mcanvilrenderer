@@ -6,8 +6,11 @@ mod dim_renderer;
 use log::{info};
 use std::collections::{HashMap};
 use std::path::{PathBuf};
+use std::error::{Error};
+use regex::Regex;
+use lazy_static::lazy_static;
 
-use update_detector::{RLoc};
+use update_detector::{RLoc, RegionBounds};
 use dim_renderer::{DimensionRenderer};
 use dim_renderer::RegionProgress::*;
 use dimension::{Dimension};
@@ -34,9 +37,36 @@ struct Cli {
     #[clap(short, long, value_name="DIR", parse(from_os_str))]
     palette_path: PathBuf,
 
-    /// Log mode
+    // Region from location
+    #[clap(long, parse(try_from_str = parse_location_val))]
+    from: Option<(i32, i32)>,
+
+    // Region to location
+    #[clap(long, parse(try_from_str = parse_location_val))]
+    to: Option<(i32, i32)>,
+
+    // Log mode
     #[clap(short, long)]
-    bgmode: bool
+    bgmode: bool,
+
+    // Unuse cache
+    #[clap(short, long)]
+    nocache: bool,
+}
+
+/// Parse location value
+fn parse_location_val(s: &str) -> Result<(i32, i32), Box<dyn Error + Send + Sync + 'static>>
+{
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(-?\d+),(-?\d+)").unwrap();
+    }
+    if let Some(cap) = RE.captures(s) {
+       let x: i32 = cap.get(1).unwrap().as_str().parse().unwrap();
+       let z: i32 = cap.get(2).unwrap().as_str().parse().unwrap();
+       return Ok((x, z));
+    } else {
+        return Err(format!("invalid xloc,zloc").into());
+    }
 }
 
 /*
@@ -47,15 +77,24 @@ fn main() {
 
     let args = Cli::parse();
 
-    let dim = Dimension::from_dimdir(&args.dimension_path, &args.cache_path).unwrap();
+    let bounds: Option<RegionBounds>;
+    if let (Some(from), Some(to)) = (args.from, args.to) {
+        bounds = Some((RLoc(from.0, from.1), RLoc(to.0, to.1)));
+    } else {
+        bounds = None;
+    }
+    println!("{:?}", bounds);
+
+    let dim = Dimension::from_dimdir(&args.dimension_path, &args.cache_path, bounds.as_ref(), args.nocache).unwrap();
 
     let palette = Arc::new(crate::renderer::get_palette(&args.palette_path).unwrap());
     let dim_renderer = DimensionRenderer::new(dim, &args.image_path);
 
     let (progress_sender, progress_receiver) = sync_channel(10);
 
+    let nocache = args.nocache;
     let render_handle = std::thread::spawn(move || {
-        dim_renderer.render_all(palette, progress_sender);
+        dim_renderer.render_all(palette, progress_sender, nocache);
         dim_renderer.get_dimension().save_cache().unwrap();
     });
 

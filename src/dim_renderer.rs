@@ -124,7 +124,14 @@ impl DimensionRenderer {
         let chunk = Self::get_chunk(inner, rloc, &cloc);
         if let None = chunk { return None; }
 
-        if let Some(chunk_north) = Self::get_chunk(inner, rloc, &cloc.offset(0, -1)) {
+        // get north chunk
+        let chunk_north = if cloc.1 == 0 {
+            Self::get_chunk(inner, &rloc.offset(0, -1), &cloc.offset(0, 31))
+        } else {
+            Self::get_chunk(inner, rloc, &cloc.offset(0, -1))
+        };
+
+        if let Some(chunk_north) = chunk_north {
             return Some(renderer.render(&*chunk.unwrap(), Some(&*chunk_north)));
         } else {
             return Some(renderer.render(&*chunk.unwrap(), None));
@@ -149,7 +156,7 @@ impl DimensionRenderer {
         }
     }
 
-    pub fn render_all(&self, palette: Arc<fastanvil::RenderedPalette>, sender: SyncSender<RegionProgress>) {
+    pub fn render_all(&self, palette: Arc<fastanvil::RenderedPalette>, sender: SyncSender<RegionProgress>, nocache: bool) {
         use std::iter::FromIterator;
         sender.send(RegionProgress::BeginAll(self.inner.dimension.render_regions.iter().fold(0, |c, (_, v)| c + v.len()))).unwrap();
         let regions = self.inner.dimension.render_regions.keys();
@@ -164,7 +171,8 @@ impl DimensionRenderer {
             let sender = sender.clone();
             pool.execute(move || {
                 // Load cached image.
-                let cached_image = Self::load_cached_image(&inner, &rloc);
+                let cached_image = if nocache { vec![[0u8;4]; 512*512] }
+                    else { Self::load_cached_image(&inner, &rloc) };
                 // Render the region
                 let new_image = Self::render_region(&inner, &rloc, cached_image, palette, sender.clone());
 

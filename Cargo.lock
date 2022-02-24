@@ -492,6 +492,7 @@ dependencies = [
  "flate2",
  "image",
  "indicatif",
+ "lazy_static",
  "log",
  "regex",
  "serde_json",

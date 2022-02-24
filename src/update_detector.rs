@@ -7,11 +7,13 @@ pub type CCoord = i32;
 pub fn r2r(r: RCoord) -> fastanvil::RCoord { fastanvil::RCoord(r as isize) }
 pub fn c2c(c: CCoord) -> fastanvil::CCoord { fastanvil::CCoord(c as isize) }
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct CLoc(pub CCoord, pub CCoord);
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct RLoc(pub RCoord, pub RCoord);
+
+pub type RegionBounds = (RLoc, RLoc);
 
 impl From<(CCoord, CCoord)> for CLoc {
     fn from(tuple: (CCoord, CCoord)) -> Self {

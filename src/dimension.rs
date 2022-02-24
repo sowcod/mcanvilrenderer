@@ -10,7 +10,7 @@ use std::hash::{Hash};
 use regex::{Regex};
 
 use crate::update_detector::{RegionTimestamps};
-use crate::update_detector::{CLoc, RLoc};
+use crate::update_detector::{CLoc, RLoc, RegionBounds};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 type ShareHashMap<K, V> = Rc<RefCell<HashMap<K, V>>>;
@@ -35,7 +35,7 @@ fn share_borrow_mut_with<K: Eq + Hash, V, F: FnOnce() -> Rc<V>>(hash_map: &Share
 }
 
 impl Dimension {
-    pub fn from_dimdir(dim_path: &PathBuf, cache_path: &PathBuf) -> Result<Dimension> {
+    pub fn from_dimdir(dim_path: &PathBuf, cache_path: &PathBuf, bounds: Option<&RegionBounds>, nocache: bool) -> Result<Dimension> {
         // Read regions
         let mut region_locs: HashMap<RLoc, PathBuf> = Default::default();
         let dir = dim_path.read_dir()?;
@@ -51,6 +51,18 @@ impl Dimension {
 
             let x: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
             let z: i32 = caps.get(2).unwrap().as_str().parse().unwrap();
+
+            // if bounds is None => true
+            // if inner of bounds => true
+            // if out of bounds => false
+            let is_target = if let Some(bounds) = bounds {
+                bounds.0.0 <= x && x <= bounds.1.0 && bounds.0.1 <= z && z <= bounds.1.1
+            } else { true };
+            // if let Some(bounds) = bounds {
+            //     info!("{}, {} <= {} <= {}, {} <= {} <= {}", is_target, bounds.0.0, x, bounds.1.0, bounds.0.1, z, bounds.1.1);
+            // }
+            
+            if !is_target { continue; }
             region_locs.insert(RLoc(x, z), file.path());
         }
 
@@ -63,13 +75,15 @@ impl Dimension {
 
             let mut cache_path = PathBuf::from(&cache_path);
             cache_path.push(to_cache_name(&rloc));
-            let cache = match File::open(&cache_path) {
-                Ok(mut cache_file) => {
-                    // info!("cache path {}", std::fs::canonicalize(&cache_path).unwrap().to_str().unwrap());
-                    info!("cache OK {}", cache_path.to_str().unwrap());
-                    Some(RegionTimestamps::from_cachedata(&mut cache_file).unwrap())
-                },
-                Err(_) => None,
+            let cache = if nocache { None } else {
+                match File::open(&cache_path) {
+                    Ok(mut cache_file) => {
+                        // info!("cache path {}", std::fs::canonicalize(&cache_path).unwrap().to_str().unwrap());
+                        info!("cache OK {}", cache_path.to_str().unwrap());
+                        Some(RegionTimestamps::from_cachedata(&mut cache_file).unwrap())
+                    },
+                    Err(_) => None,
+                }
             };
 
             // If cache not exists, pass None.
@@ -88,14 +102,14 @@ impl Dimension {
                 render_required_chunks.insert(cloc.clone());
                 
                 // Set South chunk
-                if cloc.1 <= 15 {
+                if cloc.1 < 31 {
                     // in the region
                     let south = CLoc::from(cloc).offset(0, 1);
                     render_required_chunks.insert(south);
                 } else {
                     // In South region
                     // Convert chunk location for south region.
-                    let south = cloc.offset(0, -16);
+                    let south = cloc.offset(0, -31);
                     // Get render chunks hashset for south region.
                     let render_required_chunks_south_r = share_borrow_mut_with(
                         &render_regions, rloc.offset(0, 1), || Default::default());
