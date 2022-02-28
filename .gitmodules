@@ -1,0 +1,3 @@
+[submodule "fastnbt"]
+	path = fastnbt
+	url = git@github.com:owengage/fastnbt.git
