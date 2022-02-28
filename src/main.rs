@@ -37,13 +37,9 @@ struct Cli {
     #[clap(short, long, value_name="DIR", parse(from_os_str))]
     palette_path: PathBuf,
 
-    // Region from location
-    #[clap(long, parse(try_from_str = parse_location_val))]
-    from: Option<(i32, i32)>,
-
-    // Region to location
-    #[clap(long, parse(try_from_str = parse_location_val))]
-    to: Option<(i32, i32)>,
+    // Render location range.(Set one or two locations. example: "L-1,10" or "L-10,10" "L10,20")
+    #[clap(short='R', long, parse(try_from_str = parse_location_val), multiple_occurrences(true), max_occurrences(2))]
+    range: Option<Vec<(i32, i32)>>,
 
     // Log mode
     #[clap(short, long)]
@@ -56,10 +52,10 @@ struct Cli {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum)]
 enum CacheMode {
-    Default,
-    Refresh,
-    ReadOnly,
-    NoCache,
+    Default, // cache SAVE and LOAD
+    Refresh, // cache SAVE only
+    ReadOnly, // cache LOAD only
+    NoCache, // ignore cache
 }
 
 /// Parse location value
@@ -86,12 +82,27 @@ fn main() {
     let args = Cli::parse();
 
     let bounds: Option<RegionBounds>;
-    if let (Some(from), Some(to)) = (args.from, args.to) {
-        bounds = Some((RLoc(from.0, from.1), RLoc(to.0, to.1)));
+    if let Some(range) = args.range {
+        match range.len() {
+            1 => {
+                let range = range[0];
+                bounds = Some((RLoc(range.0, range.1), RLoc(range.0, range.1)));
+            },
+            2 => {
+                let range1 = range[0];
+                let range2 = range[1];
+                bounds = Some((
+                    RLoc(range1.0.min(range2.0), range1.1.min(range2.1)),
+                    RLoc(range1.0.max(range2.0), range1.1.max(range2.1)),
+                ));
+            },
+            _ => {
+                bounds = None;
+            }
+        } 
     } else {
         bounds = None;
     }
-    println!("{:?}", bounds);
 
     let nocache = args.cache_mode == CacheMode::NoCache || args.cache_mode == CacheMode::Refresh;
     let cache_ro = args.cache_mode == CacheMode::ReadOnly;
@@ -104,7 +115,6 @@ fn main() {
 
     let render_handle = std::thread::spawn(move || {
         dim_renderer.render_all(palette, progress_sender, nocache);
-        // dim_renderer.get_dimension().save_cache().unwrap();
     });
 
     if args.bgmode {
