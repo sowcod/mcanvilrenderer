@@ -16,7 +16,7 @@ use dim_renderer::RegionProgress::*;
 use dimension::{Dimension};
 use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::{Arc};
-use clap::{Parser};
+use clap::{Parser, ArgEnum};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -49,9 +49,17 @@ struct Cli {
     #[clap(short, long)]
     bgmode: bool,
 
-    // Unuse cache
-    #[clap(short, long)]
-    nocache: bool,
+    // cache mode
+    #[clap(long, arg_enum, default_value_t = CacheMode::Default)]
+    cache_mode: CacheMode,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum)]
+enum CacheMode {
+    Default,
+    Refresh,
+    ReadOnly,
+    NoCache,
 }
 
 /// Parse location value
@@ -85,17 +93,18 @@ fn main() {
     }
     println!("{:?}", bounds);
 
-    let dim = Dimension::from_dimdir(&args.dimension_path, &args.cache_path, bounds.as_ref(), args.nocache).unwrap();
+    let nocache = args.cache_mode == CacheMode::NoCache || args.cache_mode == CacheMode::Refresh;
+    let cache_ro = args.cache_mode == CacheMode::ReadOnly;
+    let dim = Dimension::from_dimdir(&args.dimension_path, &args.cache_path, bounds.as_ref(), nocache, cache_ro).unwrap();
 
     let palette = Arc::new(crate::renderer::get_palette(&args.palette_path).unwrap());
     let dim_renderer = DimensionRenderer::new(dim, &args.image_path);
 
     let (progress_sender, progress_receiver) = sync_channel(10);
 
-    let nocache = args.nocache;
     let render_handle = std::thread::spawn(move || {
         dim_renderer.render_all(palette, progress_sender, nocache);
-        dim_renderer.get_dimension().save_cache().unwrap();
+        // dim_renderer.get_dimension().save_cache().unwrap();
     });
 
     if args.bgmode {
@@ -114,12 +123,12 @@ fn normal_mode(receiver: Receiver<dim_renderer::RegionProgress>) {
     let mut bars: Vec<ProgressBar> = Default::default();
     let bar_master = multi_bar.add(ProgressBar::new(0));
     let sty_master = ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] {bar:40.cyan/cyan} {pos:>7}/{len:7} {msg}");
+        .template("[{elapsed_precise}] {bar:40.cyan/cyan} {pos:>7}/{len:7} {msg} ETA: [{eta_precise}]");
         //.progress_chars("##-");
     bar_master.set_style(sty_master.clone());
     bar_master.set_message("Total");
     let sty = ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} Region: {msg}")
         .progress_chars("##-");
     for _ in 0..4 {
         let bar = multi_bar.add(ProgressBar::new(0));

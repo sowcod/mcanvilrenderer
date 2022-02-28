@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["-p", "palette.tar.gz", "-d", "./region", "-c","./cache","-i","./images", "--from","3,-14","--to","3,-14","--nocache","--bgmode"],
             "cwd": "${workspaceFolder}"
         },
         {

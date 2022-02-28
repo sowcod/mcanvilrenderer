@@ -2,7 +2,7 @@ use fastanvil::{Region, RegionLoader, RegionFileLoader, JavaChunk, TopShadeRende
 use std::collections::{HashMap, HashSet};
 use std::mem::drop;
 use std::sync::{Arc, Mutex, RwLock, mpsc::SyncSender};
-use log::{info};
+use log::{info, debug};
 use std::path::{Path, PathBuf};
 use threadpool::{ThreadPool};
 use image::{ImageBuffer, Rgba};
@@ -85,10 +85,6 @@ impl DimensionRenderer {
         }
     }
 
-    pub fn get_dimension(&self) -> &Dimension {
-        self.inner.dimension.as_ref()
-    }
-
     fn render_region(inner: &DimensionRendererInner, rloc: &RLoc, buf: Vec<fastanvil::Rgba>, palette: Arc<fastanvil::RenderedPalette>, sender: SyncSender<RegionProgress>) -> Vec<fastanvil::Rgba> {
         let clocs = if let Some(clocs) = inner.dimension.render_regions.get(rloc) {
             clocs
@@ -101,8 +97,10 @@ impl DimensionRenderer {
         let mut buf = buf;
         let buf_l = buf.as_mut_slice();
         for cloc in clocs {
+            // if cloc.0 != 15 || cloc.1 != 16 { continue; }
             let renderer = TopShadeRenderer::new(&*palette, fastanvil::HeightMode::Trust);
             if let Some(chunk_buf) = Self::render_chunk(&inner, &renderer, &rloc, &cloc) {
+                debug!("render {},{}", cloc.0, cloc.1);
                 for y in 0..16 {
                     let px = (cloc.0 * 16) as usize;
                     let py = (cloc.1 * 16 + y) as usize;
@@ -199,7 +197,6 @@ impl DimensionRenderer {
                         });
                 }
                 // save region image
-
                 let flat_buf: &[u8] = new_image.as_slice().flat();
                 let bufvec: Vec<u8> = Vec::from(flat_buf);
                 let write_path = inner.image_path.join(to_image_name(&rloc));
@@ -207,6 +204,10 @@ impl DimensionRenderer {
 
                 info!("{:?}", write_path.to_str());
                 imgbuf.save(write_path).unwrap();
+                
+                // save cache
+                inner.dimension.save_cache(&rloc).unwrap();
+
                 sender.send(RegionProgress::End(rloc.clone())).unwrap();
             });
         }

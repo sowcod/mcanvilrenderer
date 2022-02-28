@@ -21,6 +21,7 @@ pub struct Dimension {
     pub cache_path: PathBuf,
     pub timestamps: HashMap<RLoc, RegionTimestamps>,
     pub render_regions: HashMap<RLoc, HashSet<CLoc>>,
+    cache_ro: bool,
 }
 
 fn to_cache_name(loc: &RLoc) -> String {
@@ -35,7 +36,7 @@ fn share_borrow_mut_with<K: Eq + Hash, V, F: FnOnce() -> Rc<V>>(hash_map: &Share
 }
 
 impl Dimension {
-    pub fn from_dimdir(dim_path: &PathBuf, cache_path: &PathBuf, bounds: Option<&RegionBounds>, nocache: bool) -> Result<Dimension> {
+    pub fn from_dimdir(dim_path: &PathBuf, cache_path: &PathBuf, bounds: Option<&RegionBounds>, nocache: bool, cache_ro: bool) -> Result<Dimension> {
         // Read regions
         let mut region_locs: HashMap<RLoc, PathBuf> = Default::default();
         let dir = dim_path.read_dir()?;
@@ -143,10 +144,19 @@ impl Dimension {
             cache_path: cache_path.to_path_buf(),
             timestamps: timestamps,
             render_regions: render_regions,
+            cache_ro: cache_ro,
         })
     }
-    pub fn save_cache(&self) -> std::io::Result<()> {
-        for (rloc, timestamps) in &self.timestamps {
+    #[allow(dead_code)]
+    pub fn save_cache_all(&self) -> std::io::Result<()> {
+        for rloc in self.timestamps.keys() {
+            self.save_cache(&rloc)?;
+        }
+        Ok(())
+    }
+    pub fn save_cache(&self, rloc: &RLoc) -> std::io::Result<()> {
+        if self.cache_ro { return Ok(()); }
+        if let Some(timestamps) = self.timestamps.get(rloc) {
             info!("save {} {}", rloc.0, rloc.1);
             let filepath = self.cache_path.join(to_cache_name(&rloc));
             let mut file = OpenOptions::new()
