@@ -3,13 +3,15 @@ name = "mcanvilrenderer"
 version = "0.1.0"
 authors = ["sowcod <sow.code.42@gmail.com>"]
 edition = "2018"
+default-run = "mcanvilrenderer"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 # fastanvil="0.24"
 fastanvil={path="./fastnbt/fastanvil"}
-fastnbt-tools="0.23"
+# fastnbt-tools="0.23"
+fastnbt-tools={path="./fastnbt/tools"}
 tar="0.4"
 flate2 = "1.0"
 image = "0.23.4"
@@ -24,3 +26,7 @@ threadpool="1.8"
 lazy_static="1"
 clap = { version = "3.1", features=["derive"] }
 # serde = { version = "1.0.111", features=["derive"] }
+
+[[bin]]
+name = "anvil-palette"
+path = "fastnbt/tools/src/bin/anvil-palette.rs"

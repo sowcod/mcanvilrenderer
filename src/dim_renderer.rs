@@ -100,7 +100,6 @@ impl DimensionRenderer {
             // if cloc.0 != 15 || cloc.1 != 16 { continue; }
             let renderer = TopShadeRenderer::new(&*palette, fastanvil::HeightMode::Trust);
             if let Some(chunk_buf) = Self::render_chunk(&inner, &renderer, &rloc, &cloc) {
-                debug!("render {},{}", cloc.0, cloc.1);
                 for y in 0..16 {
                     let px = (cloc.0 * 16) as usize;
                     let py = (cloc.1 * 16 + y) as usize;
