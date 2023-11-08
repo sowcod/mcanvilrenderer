@@ -1,14 +1,29 @@
+use core::fmt;
+use std::error::Error;
 use std::io::{Read, Write, Seek, SeekFrom, Cursor};
-use std::cmp::{PartialEq};
-use std::clone::{Clone};
+use std::cmp::PartialEq;
+use std::clone::Clone;
+use std::convert::TryFrom;
+use fmt::Formatter;
 
 pub type RCoord = i32;
-pub type CCoord = i32;
+pub type CCoord = usize;
 pub fn r2r(r: RCoord) -> fastanvil::RCoord { fastanvil::RCoord(r as isize) }
-pub fn c2c(c: CCoord) -> fastanvil::CCoord { fastanvil::CCoord(c as isize) }
+// pub fn c2c(c: CCoord) -> fastanvil::CCoord { fastanvil::CCoord(c as isize) }
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct CLoc(pub CCoord, pub CCoord);
+
+#[derive(Debug, Clone)]
+pub struct InvalidOffsetError;
+
+impl Error for InvalidOffsetError { }
+
+impl fmt::Display for InvalidOffsetError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Chunk coord will be out of bounds.")
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct RLoc(pub RCoord, pub RCoord);
@@ -27,8 +42,14 @@ impl From<(RCoord, RCoord)> for RLoc {
 }
 
 impl CLoc {
-    pub fn offset(&self, x: CCoord, z: CCoord) -> CLoc {
-        CLoc(self.0 + x, self.1 + z)
+    pub fn offset(&self, x: i32, z: i32) -> Result<CLoc, InvalidOffsetError> {
+        let new_x = i32::try_from(self.0).unwrap() + x;
+        let new_z = i32::try_from(self.1).unwrap() + z;
+
+        if new_x < 0 || new_x >= 32 { return Err(InvalidOffsetError); }
+        if new_z < 0 || new_z >= 32 { return Err(InvalidOffsetError); }
+
+        Ok(CLoc(usize::try_from(new_x).unwrap(), usize::try_from(new_z).unwrap()))
     }
 }
 
@@ -49,7 +70,7 @@ pub struct ChunkTimestamp {
 }
 impl std::fmt::Display for ChunkTimestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let time = chrono::NaiveDateTime::from_timestamp(self.timestamp.into(), 0);
+        let time = chrono::NaiveDateTime::from_timestamp_opt(self.timestamp.into(), 0).unwrap();
         write!(f, "x:{:0}, z:{:0}, timestamp:{}", self.x as i32, self.z, time.format("%Y-%m-%d %H:%M:%S"))
     }
 }
@@ -79,8 +100,8 @@ impl RegionTimestamps {
         for (index, timestamp) in tsarray.iter().enumerate() {
             if *timestamp > 0 {
                 timestamps.push(ChunkTimestamp{
-                    x: (index as i32 % 32).into(),
-                    z: (index as i32 / 32).into(),
+                    x: index % 32,
+                    z: index / 32,
                     timestamp: *timestamp,
                 });
             }
@@ -109,8 +130,8 @@ impl RegionTimestamps {
         for index in 0..1024 {
             if me_ar[index] > 0 && (me_ar[index] != other_ar[index]) {
                 diffs.push((
-                    (index as i32 % 32).into(), // x
-                    (index as i32 / 32).into()  // z
+                    index % 32, // x
+                    index / 32  // z
                 ))
             }
         }

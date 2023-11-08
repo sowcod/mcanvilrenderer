@@ -9,24 +9,25 @@ default-run = "mcanvilrenderer"
 
 [dependencies]
 # fastanvil="0.24"
+# fastanvil="0.30"
 fastanvil={path="./fastnbt/fastanvil"}
 # fastnbt-tools="0.23"
 fastnbt-tools={path="./fastnbt/tools"}
+fastnbt="2.4"
 tar="0.4"
 flate2 = "1.0"
-image = "0.23.4"
+image = "0.23" # 0.24 NG
 serde_json = "1.0"
 chrono="0.4"
 regex="1"
 log="0.4"
-env_logger="0.9"
-slice-of-array = "0.3.1"
-indicatif="0.16"
+env_logger="0.10"
+slice-of-array = "0.3.2"
+indicatif="0.17"
 threadpool="1.8"
 lazy_static="1"
 clap = { version = "3.1", features=["derive"] }
 # serde = { version = "1.0.111", features=["derive"] }
-
 [[bin]]
 name = "anvil-palette"
 path = "fastnbt/tools/src/bin/anvil-palette.rs"

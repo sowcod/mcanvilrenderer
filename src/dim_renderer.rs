@@ -1,16 +1,17 @@
-use fastanvil::{Region, RegionLoader, RegionFileLoader, JavaChunk, TopShadeRenderer};
+use fastanvil::{Region, RegionLoader, RegionFileLoader, JavaChunk, TopShadeRenderer, Chunk};
 use std::collections::{HashMap, HashSet};
 use std::mem::drop;
 use std::sync::{Arc, Mutex, RwLock, mpsc::SyncSender};
 use log::{info, debug};
+use std::fs::File;
 use std::path::{Path, PathBuf};
-use threadpool::{ThreadPool};
+use threadpool::ThreadPool;
 use image::{ImageBuffer, Rgba};
 use slice_of_array::prelude::*;
 use crate::dimension::Dimension;
-use crate::update_detector::{RLoc, CLoc, r2r, c2c};
+use crate::update_detector::{RLoc, CLoc, r2r};
 
-type ShareRegion = Arc<Box<dyn Region<JavaChunk>>>;
+type ShareRegion = Arc<Mutex<Box<Region<File>>>>;
 type ChunkImageBuffer = [fastanvil::Rgba; 16*16];
 
 pub fn to_image_name(rloc: &RLoc) -> String {
@@ -28,7 +29,7 @@ pub enum RegionProgress {
 
 struct DimensionRendererInner {
     image_path: PathBuf,
-    loader: RegionFileLoader<JavaChunk>,
+    loader: RegionFileLoader,
     dimension: Box<Dimension>,
     regions: Arc<Mutex<HashMap<RLoc, ShareRegion>>>,
     chunks: Arc<RwLock<HashMap<(RLoc, CLoc), Arc<JavaChunk>>>>,
@@ -42,10 +43,31 @@ impl DimensionRenderer {
     fn get_region(inner: &DimensionRendererInner, rloc: &RLoc) -> Option<ShareRegion> {
         let mut regions_l = inner.regions.lock().unwrap();
 
+        // Regionがtraitからstructに変わった。
+
+        // 0.24
+        // pub trait Region<C: Chunk>: Send + Sync {
+        //     fn chunk(&self, x: CCoord, z: CCoord) -> Option<C>;
+        // }
+        // 0.30
+        // pub struct Region<S> {
+        //     stream: S,
+        //     // last offset is always the next valid place to write a chunk.
+        //     offsets: Vec<u64>,
+        // }
+        //   pub fn read_chunk(&mut self, x: usize, z: usize) -> Result<Option<Vec<u8>>>
+        // 
+
         regions_l.get(&rloc).map(|r| Arc::clone(&r)).or_else(|| {
-            let region = Arc::new(inner.loader.region(r2r(rloc.0), r2r(rloc.1))?);
-            regions_l.insert(rloc.clone(), Arc::clone(&region));
-            Some(region)
+            debug!("region: {:?}", rloc);
+            let region_opt = inner.loader.region(r2r(rloc.0), r2r(rloc.1)).unwrap();
+            if let Some(region_unwrapped) = region_opt {
+                let region = Arc::new(Mutex::new(Box::new(region_unwrapped)));
+                regions_l.insert(rloc.clone(), Arc::clone(&region));
+                Some(region)
+            } else {
+                return None;
+            }
         })
     }
 
@@ -61,11 +83,25 @@ impl DimensionRenderer {
                 return Some(Arc::clone(&chunk));
             }
             let region = Self::get_region(inner, rloc);
-            if let None = region { return None; }
-
-            let new_chunk = region.unwrap().chunk(c2c(cloc.0), c2c(cloc.1));
-            if let None = new_chunk { return None; }
-            let new_insert_chunk = Arc::new(new_chunk.unwrap());
+            let new_chunk_data = match region {
+                None => {
+                    debug!("None chunk!_1 {}, {}", cloc.0, cloc.1);
+                    return None
+                },
+                Some(region) => {
+                    region.lock().unwrap().read_chunk(cloc.0, cloc.1).unwrap()
+                }
+            };
+            let new_chunk: JavaChunk = match new_chunk_data {
+                None => {
+                    debug!("None chunk!_2 {}, {}", cloc.0, cloc.1);
+                    return None
+                }
+                Some(chunk) => { 
+                    JavaChunk::from_bytes(&chunk).unwrap()
+                }
+            };
+            let new_insert_chunk = Arc::new(new_chunk);
             chunks_wl.insert(key, Arc::clone(&new_insert_chunk));
 
             return Some(new_insert_chunk);
@@ -77,7 +113,7 @@ impl DimensionRenderer {
         DimensionRenderer {
             inner: Arc::new(DimensionRendererInner {
                 image_path: PathBuf::from(image_path),
-                loader: RegionFileLoader::<JavaChunk>::new(dimension.dim_path.clone()),
+                loader: RegionFileLoader::new(dimension.dim_path.clone()),
                 dimension: Box::new(dimension),
                 regions: Default::default(),
                 chunks: Default::default(),
@@ -119,19 +155,23 @@ impl DimensionRenderer {
 
     fn render_chunk<'b>(inner: &DimensionRendererInner, renderer: &TopShadeRenderer<'b, fastanvil::RenderedPalette>, rloc: &RLoc, cloc: &CLoc) -> Option<ChunkImageBuffer> {
         let chunk = Self::get_chunk(inner, rloc, &cloc);
-        if let None = chunk { return None; }
+        if let None = chunk {
+            debug!("render_chunk chunk=None, {}, {}", cloc.0, cloc.1);
+            return None;
+        }
 
         // get north chunk
         let chunk_north = if cloc.1 == 0 {
-            Self::get_chunk(inner, &rloc.offset(0, -1), &cloc.offset(0, 31))
+            Self::get_chunk(inner, &rloc.offset(0, -1), &cloc.offset(0, 31).unwrap())
         } else {
-            Self::get_chunk(inner, rloc, &cloc.offset(0, -1))
+            Self::get_chunk(inner, rloc, &cloc.offset(0, -1).unwrap())
         };
 
+        let chunk = &*chunk.unwrap();
         if let Some(chunk_north) = chunk_north {
-            return Some(renderer.render(&*chunk.unwrap(), Some(&*chunk_north)));
+            return Some(renderer.render(chunk, Some(&*chunk_north)));
         } else {
-            return Some(renderer.render(&*chunk.unwrap(), None));
+            return Some(renderer.render(chunk, None));
         };
     }
 
@@ -159,7 +199,7 @@ impl DimensionRenderer {
         let regions = self.inner.dimension.render_regions.keys();
         let regions_remind = HashSet::<RLoc>::from_iter(regions.clone().map(Clone::clone).collect::<Vec<_>>());
         let regions_remind = Arc::new(Mutex::new(regions_remind));
-        let pool = ThreadPool::new(4);
+        let pool = ThreadPool::new(1);
         for rloc in regions {
             let inner = Arc::clone(&self.inner);
             let rloc = rloc.clone();

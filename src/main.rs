@@ -3,19 +3,19 @@ mod update_detector;
 mod dimension;
 mod dim_renderer;
 
-use log::{info};
-use std::collections::{HashMap};
-use std::path::{PathBuf};
-use std::error::{Error};
+use log::info;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::error::Error;
 use regex::Regex;
 use lazy_static::lazy_static;
 
 use update_detector::{RLoc, RegionBounds};
-use dim_renderer::{DimensionRenderer};
+use dim_renderer::DimensionRenderer;
 use dim_renderer::RegionProgress::*;
-use dimension::{Dimension};
+use dimension::Dimension;
 use std::sync::mpsc::{sync_channel, Receiver};
-use std::sync::{Arc};
+use std::sync::Arc;
 use clap::{Parser, ArgEnum};
 
 #[derive(Parser, Debug)]
@@ -135,10 +135,11 @@ fn normal_mode(receiver: Receiver<dim_renderer::RegionProgress>) {
     let sty_master = ProgressStyle::default_bar()
         .template("[{elapsed_precise}] {bar:40.cyan/cyan} {pos:>7}/{len:7} {msg} ETA: [{eta_precise}]");
         //.progress_chars("##-");
-    bar_master.set_style(sty_master.clone());
+    bar_master.set_style(sty_master.unwrap());
     bar_master.set_message("Total");
     let sty = ProgressStyle::default_bar()
         .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} Region: {msg}")
+        .unwrap()
         .progress_chars("##-");
     for _ in 0..4 {
         let bar = multi_bar.add(ProgressBar::new(0));
@@ -190,7 +191,6 @@ fn normal_mode(receiver: Receiver<dim_renderer::RegionProgress>) {
         }
     });
 
-    multi_bar.join().unwrap();
     progress_handle.join().unwrap();
 }
 

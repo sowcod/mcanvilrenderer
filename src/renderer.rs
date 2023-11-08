@@ -1,7 +1,7 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use fastanvil::{RenderedPalette, Rgba} ;
 
-use flate2::read::{GzDecoder};
+use flate2::read::GzDecoder;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

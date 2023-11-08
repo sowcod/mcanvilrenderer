@@ -1,8 +1,8 @@
 /target
 /resources
 memo.md
-palette.tar.gz
-/images
+palette*.tar.gz
+/images*
 /cache
 .DS_Store
-/region
+/region*

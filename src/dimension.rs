@@ -1,15 +1,15 @@
-use log::{info};
+use log::{info, debug};
 use std::error::Error;
-use std::path::{PathBuf};
-use std::cell::{RefCell};
-use std::rc::{Rc};
+use std::path::PathBuf;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::collections::{HashMap, HashSet};
 use std::fs::{OpenOptions, File};
-use std::cmp::{Eq};
-use std::hash::{Hash};
-use regex::{Regex};
+use std::cmp::Eq;
+use std::hash::Hash;
+use regex::Regex;
 
-use crate::update_detector::{RegionTimestamps};
+use crate::update_detector::RegionTimestamps;
 use crate::update_detector::{CLoc, RLoc, RegionBounds};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -72,7 +72,13 @@ impl Dimension {
         let render_regions: ShareHashMap<RLoc, ShareHashSet<CLoc>> = Default::default();
         for (rloc, path) in region_locs {
             let mut region_file = File::open(&path).unwrap();
-            let region = RegionTimestamps::from_regiondata(&mut region_file)?;
+            let region = match RegionTimestamps::from_regiondata(&mut region_file) {
+                Ok(region) => region,
+                Err(_) => {
+                    debug!("region {:?} cannot be read.", rloc);
+                    continue;
+                }
+            };
 
             let mut cache_path = PathBuf::from(&cache_path);
             cache_path.push(to_cache_name(&rloc));
@@ -93,6 +99,7 @@ impl Dimension {
             if diff.len() == 0 {
                 continue;
             }
+            debug!("diff.len = {}", diff.len());
             timestamps.insert(rloc.clone(), region);
 
             // Get render chunks hashset for the region.
@@ -106,7 +113,7 @@ impl Dimension {
                 if cloc.1 < 31 {
                     // in the region
                     let south = CLoc::from(cloc).offset(0, 1);
-                    render_required_chunks.insert(south);
+                    render_required_chunks.insert(south.unwrap());
                 } else {
                     // In South region
                     // Convert chunk location for south region.
@@ -115,7 +122,7 @@ impl Dimension {
                     let render_required_chunks_south_r = share_borrow_mut_with(
                         &render_regions, rloc.offset(0, 1), || Default::default());
                     let mut render_required_chunks_south = render_required_chunks_south_r.borrow_mut();
-                    render_required_chunks_south.insert(south);
+                    render_required_chunks_south.insert(south.unwrap());
                 }
             }
         }
